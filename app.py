@@ -40,9 +40,9 @@ with open(css_path, "r", encoding="utf-8") as f:
 # LOAD MODEL FILES
 # ============================================================
 
-model = joblib.load("decision_tree_model.pkl")
-scaler = joblib.load("scaler.pkl")
-selected_features = list(joblib.load("selected_features.pkl"))
+model = joblib.load("final_random_forest_model.pkl")
+# scaler = joblib.load("scaler.pkl")
+selected_features = list(joblib.load("model_features.pkl"))
 
 
 # ============================================================
@@ -84,7 +84,7 @@ page = st.sidebar.radio(
 st.sidebar.divider()
 
 st.sidebar.markdown("**Model**")
-st.sidebar.write("Tuned Decision Tree Regressor")
+st.sidebar.write("Tuned Random Forest Regressor")
 
 st.sidebar.markdown("**Target**")
 st.sidebar.write("CIscore")
@@ -393,7 +393,7 @@ if page == "🏠 Home":
                 <b>2.</b> Enter population and socioeconomic indicators.<br>
                 <b>3.</b> Enter health indicators.<br>
                 <b>4.</b> Enter the remaining selected indicators.<br>
-                <b>5.</b> The trained Decision Tree model processes the inputs.<br>
+                <b>5.</b> The trained Random Forest model processes the inputs.<br>
                 <b>6.</b> The model predicts the CIscore.
             </div>
         </div>
@@ -717,7 +717,7 @@ elif page == "🔬 CIscore Prediction":
 
         st.write(
             "The predicted value is the output of the trained "
-            "Decision Tree regression model using the selected "
+            "Random Forest regression model using the selected "
             "community indicators."
         )
 
@@ -803,10 +803,10 @@ elif page == "ℹ️ About the Model":
     st.markdown(
         """
         <div class="card">
-            <div class="card-title">🌳 Decision Tree Regression</div>
+            <div class="card-title">🌳 Random  Forest Regression</div>
             <div class="card-text">
-                The final application uses the trained Decision Tree
-                regression model. Decision Trees can capture
+                The final application uses the trained Random Forest
+                regression model. Random Forest can capture
                 non-linear relationships and interactions between
                 predictors.
             </div>
@@ -821,7 +821,7 @@ elif page == "ℹ️ About the Model":
             <div class="card-title">🔧 Hyperparameter Tuning</div>
             <div class="card-text">
                 GridSearchCV with cross-validation was used to search
-                for suitable Decision Tree configurations. Parameters
+                for suitable Random Forest configurations. Parameters
                 considered included max_depth, min_samples_split and
                 min_samples_leaf.
             </div>
