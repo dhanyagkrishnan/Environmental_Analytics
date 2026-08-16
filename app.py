@@ -284,19 +284,22 @@ def render_feature_inputs(features, key_prefix):
             )
 
             # Simple text box
+            
+            saved_value = st.session_state.input_values.get(feature, "")
             value = st.text_input(
                 str(feature),
-                value=f"{current_value:.4f}",
+                #value=f"{current_value:.4f}",
+                 value=str(saved_value),
                 placeholder="Enter value",
                 key=f"{key_prefix}_{feature}"
             )
-
-            # Convert the entered value to numeric
-            try:
-                st.session_state.input_values[feature] = float(value)
-
-            except ValueError:
-                st.session_state.input_values[feature] = 0.0
+            if value.strip() != "":
+                try:
+                    st.session_state.input_values[feature] = float(value)
+                except ValueError:
+                        st.session_state.input_values.pop(feature, None)
+            else:
+                st.session_state.input_values.pop(feature, None)
 # ============================================================
 # HOME PAGE
 # ============================================================
@@ -485,8 +488,26 @@ elif page == "🔬 CIscore Prediction":
             type="primary",
             use_container_width=True,
         ):
-            st.session_state.step = 2
-            st.rerun()
+            missing = [
+        feature
+        for feature in groups["environmental"]
+        if not str(
+            st.session_state.input_values.get(feature, "")
+        ).strip()
+    ]
+
+            if missing:
+
+                st.error(
+                "Please fill in all Environmental Indicators before continuing."
+                )
+
+                with st.expander("Show missing indicators"):
+                    for feature in missing:
+                        st.write(f"• {feature}")
+            else:            
+                st.session_state.step = 2
+                st.rerun()
 
     # --------------------------------------------------------
     # STEP 2
@@ -533,8 +554,28 @@ elif page == "🔬 CIscore Prediction":
                 type="primary",
                 use_container_width=True,
             ):
-                st.session_state.step = 3
-                st.rerun()
+                missing = [
+                          feature
+                          for feature in groups["population"]
+                          if not str(
+                            st.session_state.input_values.get(feature, "")
+                          ).strip()
+                ]
+
+                if missing:
+
+                    st.error(
+                    "Please fill in all Population & Socioeconomic Indicators before continuing."
+                    )
+
+                    with st.expander("Show missing indicators"):
+                        for feature in missing:
+                            st.write(f"• {feature}")
+
+                else:
+
+                    st.session_state.step = 3
+                    st.rerun()
 
     # --------------------------------------------------------
     # STEP 3
@@ -581,8 +622,28 @@ elif page == "🔬 CIscore Prediction":
                 type="primary",
                 use_container_width=True,
             ):
-                st.session_state.step = 4
-                st.rerun()
+                missing = [
+                    feature
+                    for feature in groups["health"]
+                    if not str(
+                        st.session_state.input_values.get(feature, "")
+                    ).strip()
+                ]
+
+                if missing:
+
+                    st.error(
+                         "Please fill in all Health Indicators before continuing."
+                    )
+
+                    with st.expander("Show missing indicators"):
+                        for feature in missing:
+                            st.write(f"• {feature}")
+
+                else:
+
+                    st.session_state.step = 4
+                    st.rerun()
 
     # --------------------------------------------------------
     # STEP 4
@@ -670,10 +731,10 @@ elif page == "🔬 CIscore Prediction":
                         # The current deployment setup uses the saved
                         # scaler because the existing app/model files
                         # were prepared with scaler.pkl.
-                        input_scaled = scaler.transform(input_data)
+                       #input_scaled = scaler.transform(input_data)
 
                         predicted_ciscore = float(
-                            model.predict(input_scaled)[0]
+                          model.predict(input_data)[0]
                         )
 
                         st.session_state.prediction = predicted_ciscore

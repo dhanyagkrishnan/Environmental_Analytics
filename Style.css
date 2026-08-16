@@ -286,36 +286,133 @@ div[data-testid="stTextInput"] {
    RESULT CARD
    ------------------------------------------------------------ */
 
-.result-card {
-    background: linear-gradient(
-        135deg,
-        #075b5c,
-        #168a87
-    ) !important;
+./* ================================
+   BEAUTIFUL CI SCORE RESULT CARD
+   ================================ */
+
+.result-box {
+    position: relative;
+    overflow: hidden;
+
+    margin: 28px auto;
+    padding: 30px 25px;
+
+    max-width: 850px;
+    min-height: 230px;
+
+    border-radius: 28px;
+
+    background:
+        linear-gradient(
+            135deg,
+            rgba(8, 108, 103, 0.97),
+            rgba(22, 145, 135, 0.94)
+        );
+
+    box-shadow:
+        0 15px 35px rgba(0, 100, 90, 0.20),
+        0 5px 12px rgba(0, 0, 0, 0.08);
+
+    text-align: center;
 
     color: white;
-    border-radius: 22px;
-    padding: 36px;
-    text-align: center;
-    margin-top: 25px;
-    box-shadow: 0 10px 28px rgba(0, 80, 80, 0.16);
+
+    border: 1px solid rgba(255, 255, 255, 0.25);
 }
 
-.result-caption {
+
+/* Decorative environmental glow */
+.result-box::before {
+    content: "🌿";
+
+    position: absolute;
+
+    left: 25px;
+    bottom: -15px;
+
+    font-size: 90px;
+
+    opacity: 0.12;
+
+    transform: rotate(-15deg);
+}
+
+
+/* Second decorative element */
+.result-box::after {
+    content: "🍃";
+
+    position: absolute;
+
+    right: 25px;
+    top: -20px;
+
+    font-size: 85px;
+
+    opacity: 0.12;
+
+    transform: rotate(15deg);
+}
+
+
+/* Result title */
+.result-box .small-text:first-child {
+    position: relative;
+    z-index: 2;
+
     font-size: 18px;
-    opacity: 0.95;
+
+    font-weight: 500;
+
+    letter-spacing: 0.5px;
+
+    margin-bottom: 8px;
 }
 
-.result-number {
-    font-size: 62px;
-    font-weight: 850;
-    margin: 8px 0;
+
+/* CIscore number */
+.result-value {
+    position: relative;
+    z-index: 2;
+
+    font-size: 58px;
+
+    font-weight: 800;
+
+    line-height: 1.1;
+
+    margin: 10px 0;
+
+    color: white;
+
+    text-shadow:
+        0 3px 10px rgba(0, 0, 0, 0.15);
 }
 
-.result-unit {
-    font-size: 18px;
-}
 
+/* CIscore label */
+.result-box .small-text:last-child {
+    position: relative;
+    z-index: 2;
+
+    display: inline-block;
+
+    padding: 6px 18px;
+
+    margin-top: 8px;
+
+    border-radius: 20px;
+
+    background: rgba(255, 255, 255, 0.16);
+
+    border: 1px solid rgba(255, 255, 255, 0.25);
+
+    font-size: 15px;
+
+    font-weight: 600;
+
+    letter-spacing: 1px;
+}
 
 /* ------------------------------------------------------------
    METRICS
