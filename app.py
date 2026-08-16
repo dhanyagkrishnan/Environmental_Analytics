@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import joblib
 from pathlib import Path
+import matplotlib.pyplot as plt
 
 
 # ============================================================
@@ -15,13 +16,21 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 # ============================================================
-# LOAD EXTERNAL CSS
+# LOAD DATASET
 # ============================================================
 
-css_path = Path(__file__).with_name("style.css")
-with open(css_path, "r", encoding="utf-8") as f:
-    st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+BASE_DIR = Path(__file__).parent
+DATASET_PATH = BASE_DIR / "CalEnviroScreen_4_0_Results__-6724038633628611498.csv"
 
+try:
+    df = pd.read_csv(DATASET_PATH)
+except Exception as error:
+    st.error(
+        "Dataset could not be loaded. Please keep the CSV file in the "
+        "same folder as app.py."
+    )
+    st.exception(error)
+    st.stop()
 
 
 # ============================================================
@@ -33,8 +42,9 @@ css_path = Path(__file__).with_name("style.css")
 with open(css_path, "r", encoding="utf-8") as f:
     st.markdown(
         f"<style>{f.read()}</style>",
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
+
 
 # ============================================================
 # LOAD MODEL FILES
@@ -57,6 +67,12 @@ if "input_values" not in st.session_state:
 
 if "prediction" not in st.session_state:
     st.session_state.prediction = None
+
+if "dataset_row_loaded" not in st.session_state:
+    st.session_state.dataset_row_loaded = False
+
+if "actual_ciscore" not in st.session_state:
+    st.session_state.actual_ciscore = None
 
 
 # ============================================================
@@ -278,28 +294,35 @@ def render_feature_inputs(features, key_prefix):
 
         with columns[index % 3]:
 
-            current_value = st.session_state.input_values.get(
-                feature,
-                0.0
-            )
-
-            # Simple text box
-            
             saved_value = st.session_state.input_values.get(feature, "")
+
             value = st.text_input(
                 str(feature),
-                #value=f"{current_value:.4f}",
-                 value=str(saved_value),
+                value=str(saved_value),
                 placeholder="Enter value",
-                key=f"{key_prefix}_{feature}"
+                key=f"{key_prefix}_{feature}",
             )
-            if value.strip() != "":
+
+            if value.strip():
                 try:
                     st.session_state.input_values[feature] = float(value)
                 except ValueError:
-                        st.session_state.input_values.pop(feature, None)
+                    st.session_state.input_values.pop(feature, None)
             else:
                 st.session_state.input_values.pop(feature, None)
+
+
+def get_missing_features(features):
+    return [
+        feature
+        for feature in features
+        if (
+            feature not in st.session_state.input_values
+            or str(st.session_state.input_values.get(feature, "")).strip() == ""
+        )
+    ]
+
+
 # ============================================================
 # HOME PAGE
 # ============================================================
@@ -415,296 +438,161 @@ if page == "🏠 Home":
 
 elif page == "🔬 CIscore Prediction":
 
-    st.markdown(
-        """
-        <div class="hero">
-            <div class="hero-title">
-                🔬 Environmental Risk Prediction
-            </div>
-            <div class="hero-subtitle">
-                Enter the required indicators to estimate the CIscore.
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    st.header("📊 CIscore Prediction")
+
+    st.subheader("Choose Input Method")
+
+    input_method = st.radio(
+        "How would you like to enter community information?",
+        [
+            "✏️ Manual Entry",
+            "📂 Select from Dataset",
+        ],
+        horizontal=True,
     )
 
-    # --------------------------------------------------------
-    # STEP INFORMATION
-    # --------------------------------------------------------
+    # ========================================================
+    # SELECT FROM DATASET
+    # ========================================================
 
-    step_names = {
-        1: "🌱 Environmental & Pollution Indicators",
-        2: "👥 Population & Socioeconomic Indicators",
-        3: "🏥 Health Indicators",
-        4: "📊 Other Indicators",
-    }
+    if input_method == "📂 Select from Dataset":
 
-    current_step = st.session_state.step
+        st.subheader("📂 Select Community from Dataset")
 
-    st.markdown(
-        f"""
-        <div class="step-box">
-            <div class="step-label">STEP {current_step} OF 4</div>
-            <div class="step-name">{step_names[current_step]}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    st.progress(current_step / 4)
-
-    # --------------------------------------------------------
-    # STEP 1
-    # --------------------------------------------------------
-
-    if current_step == 1:
-
-        st.markdown(
-            '<div class="section-title">🌫️ Environmental & Pollution Indicators</div>',
-            unsafe_allow_html=True,
+        st.write(
+            "Select a row number from the CalEnviroScreen dataset "
+            "to automatically load all selected indicator values."
         )
 
-        st.markdown(
-            '<div class="section-subtitle">'
-            'Enter the environmental and pollution-related indicator values.'
-            '</div>',
-            unsafe_allow_html=True,
+        row_number = st.number_input(
+            "Select Dataset Row Number",
+            min_value=1,
+            max_value=len(df),
+            value=1,
+            step=1,
         )
-
-        st.markdown(
-            f"**{len(groups['environmental'])} selected indicators**"
-        )
-
-        render_feature_inputs(
-            groups["environmental"],
-            "environmental",
-        )
-
-        st.divider()
 
         if st.button(
-            "Continue to Population & Socioeconomic ➡️",
+            "📥 Load Community Data",
             type="primary",
             use_container_width=True,
         ):
-            missing = [
-        feature
-        for feature in groups["environmental"]
-        if not str(
-            st.session_state.input_values.get(feature, "")
-        ).strip()
-    ]
 
-            if missing:
+            selected_row = df.iloc[int(row_number) - 1]
 
-                st.error(
-                "Please fill in all Environmental Indicators before continuing."
+            # Get the actual CIscore from the selected dataset row.
+            if "CIscore" in df.columns:
+                try:
+                    st.session_state.actual_ciscore = float(
+                        selected_row["CIscore"]
+                    )
+                except (ValueError, TypeError):
+                    st.session_state.actual_ciscore = None
+            else:
+                st.session_state.actual_ciscore = None
+
+            loaded_features = []
+            missing_features = []
+
+            for feature in selected_features:
+
+                if feature not in df.columns:
+                    missing_features.append(feature)
+                    continue
+
+                value = selected_row[feature]
+
+                if pd.isna(value):
+                    missing_features.append(feature)
+                    continue
+
+                try:
+                    numeric_value = float(value)
+                    st.session_state.input_values[feature] = numeric_value
+                    loaded_features.append(feature)
+
+                except (ValueError, TypeError):
+                    missing_features.append(feature)
+
+            st.session_state.dataset_row_loaded = True
+
+            if missing_features:
+
+                st.warning(
+                    f"{len(loaded_features)} indicators loaded successfully. "
+                    f"{len(missing_features)} indicators could not be loaded."
                 )
 
-                with st.expander("Show missing indicators"):
-                    for feature in missing:
+                with st.expander("Show unavailable indicators"):
+                    for feature in missing_features:
                         st.write(f"• {feature}")
-            else:            
-                st.session_state.step = 2
-                st.rerun()
 
-    # --------------------------------------------------------
-    # STEP 2
-    # --------------------------------------------------------
+            else:
 
-    elif current_step == 2:
+                st.success(
+                    f"✅ All {len(loaded_features)} selected indicators "
+                    f"were loaded from dataset row {int(row_number)}."
+                )
 
-        st.markdown(
-            '<div class="section-title">👥 Population & Socioeconomic Indicators</div>',
-            unsafe_allow_html=True,
-        )
+            st.rerun()
 
-        st.markdown(
-            '<div class="section-subtitle">'
-            'Enter the population and socioeconomic indicator values.'
-            '</div>',
-            unsafe_allow_html=True,
-        )
+        # Show all loaded values in the text fields.
+        if st.session_state.dataset_row_loaded:
 
-        st.markdown(
-            f"**{len(groups['population'])} selected indicators**"
-        )
+            st.markdown(
+                """
+                <div class="hero">
+                    <div class="hero-title">
+                        🔬 Loaded Community Indicators
+                    </div>
+                    <div class="hero-subtitle">
+                        Values below were loaded from the selected
+                        CalEnviroScreen dataset row.
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
-        render_feature_inputs(
-            groups["population"],
-            "population",
-        )
+            st.markdown("### 🌫️ Environmental & Pollution Indicators")
+            render_feature_inputs(
+                groups["environmental"],
+                "dataset_environmental",
+            )
 
-        st.divider()
+            st.markdown("### 👥 Population & Socioeconomic Indicators")
+            render_feature_inputs(
+                groups["population"],
+                "dataset_population",
+            )
 
-        col1, col2 = st.columns(2)
+            st.markdown("### 🏥 Health Indicators")
+            render_feature_inputs(
+                groups["health"],
+                "dataset_health",
+            )
 
-        with col1:
+            st.markdown("### 📊 Other Indicators")
+            render_feature_inputs(
+                groups["other"],
+                "dataset_other",
+            )
+
+            st.divider()
+
             if st.button(
-                "⬅️ Back to Environmental",
-                use_container_width=True,
-            ):
-                st.session_state.step = 1
-                st.rerun()
-
-        with col2:
-            if st.button(
-                "Continue to Health ➡️",
-                type="primary",
-                use_container_width=True,
-            ):
-                missing = [
-                          feature
-                          for feature in groups["population"]
-                          if not str(
-                            st.session_state.input_values.get(feature, "")
-                          ).strip()
-                ]
-
-                if missing:
-
-                    st.error(
-                    "Please fill in all Population & Socioeconomic Indicators before continuing."
-                    )
-
-                    with st.expander("Show missing indicators"):
-                        for feature in missing:
-                            st.write(f"• {feature}")
-
-                else:
-
-                    st.session_state.step = 3
-                    st.rerun()
-
-    # --------------------------------------------------------
-    # STEP 3
-    # --------------------------------------------------------
-
-    elif current_step == 3:
-
-        st.markdown(
-            '<div class="section-title">🏥 Health Indicators</div>',
-            unsafe_allow_html=True,
-        )
-
-        st.markdown(
-            '<div class="section-subtitle">'
-            'Enter the selected health indicator values.'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-
-        st.markdown(
-            f"**{len(groups['health'])} selected indicators**"
-        )
-
-        render_feature_inputs(
-            groups["health"],
-            "health",
-        )
-
-        st.divider()
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            if st.button(
-                "⬅️ Back to Population",
-                use_container_width=True,
-            ):
-                st.session_state.step = 2
-                st.rerun()
-
-        with col2:
-            if st.button(
-                "Continue to Other ➡️",
-                type="primary",
-                use_container_width=True,
-            ):
-                missing = [
-                    feature
-                    for feature in groups["health"]
-                    if not str(
-                        st.session_state.input_values.get(feature, "")
-                    ).strip()
-                ]
-
-                if missing:
-
-                    st.error(
-                         "Please fill in all Health Indicators before continuing."
-                    )
-
-                    with st.expander("Show missing indicators"):
-                        for feature in missing:
-                            st.write(f"• {feature}")
-
-                else:
-
-                    st.session_state.step = 4
-                    st.rerun()
-
-    # --------------------------------------------------------
-    # STEP 4
-    # --------------------------------------------------------
-
-    elif current_step == 4:
-
-        st.markdown(
-            '<div class="section-title">📊 Other Indicators</div>',
-            unsafe_allow_html=True,
-        )
-
-        st.markdown(
-            '<div class="section-subtitle">'
-            'Enter the remaining selected indicator values.'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-
-        st.markdown(
-            f"**{len(groups['other'])} selected indicators**"
-        )
-
-        render_feature_inputs(
-            groups["other"],
-            "other",
-        )
-
-        st.divider()
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            if st.button(
-                "⬅️ Back to Health",
-                use_container_width=True,
-            ):
-                st.session_state.step = 3
-                st.rerun()
-
-        with col2:
-
-            predict_clicked = st.button(
                 "🔎 Predict CIscore",
                 type="primary",
                 use_container_width=True,
-            )
+            ):
 
-            if predict_clicked:
-
-                missing_features = [
-                    feature
-                    for feature in selected_features
-                    if feature not in st.session_state.input_values
-                ]
+                missing_features = get_missing_features(selected_features)
 
                 if missing_features:
 
                     st.error(
-                        f"{len(missing_features)} indicator value(s) "
-                        "are still missing."
+                        "Please make sure all indicators have valid values "
+                        "before prediction."
                     )
 
                     with st.expander("Show missing indicators"):
@@ -715,8 +603,6 @@ elif page == "🔬 CIscore Prediction":
 
                     try:
 
-                        # Create the input dataframe in exactly the
-                        # same feature order used during training.
                         input_data = pd.DataFrame(
                             [
                                 {
@@ -728,68 +614,484 @@ elif page == "🔬 CIscore Prediction":
                             columns=selected_features,
                         )
 
-                        # The current deployment setup uses the saved
-                        # scaler because the existing app/model files
-                        # were prepared with scaler.pkl.
-                       #input_scaled = scaler.transform(input_data)
-
                         predicted_ciscore = float(
-                          model.predict(input_data)[0]
+                            model.predict(input_data)[0]
                         )
 
                         st.session_state.prediction = predicted_ciscore
 
+                        # ====================================================
+                        # ACTUAL VS PREDICTED CIscore GRAPH
+                        # ====================================================
+
+                        actual_ciscore = st.session_state.actual_ciscore
+
+                        if actual_ciscore is not None:
+
+                            st.markdown(
+                                "### 📈 Actual vs Predicted CIscore"
+                            )
+
+                            comparison = pd.DataFrame(
+                                {
+                                    "Type": [
+                                        "Actual CIscore",
+                                        "Predicted CIscore",
+                                    ],
+                                    "CIscore": [
+                                        actual_ciscore,
+                                        predicted_ciscore,
+                                    ],
+                                }
+                            )
+
+                            fig, ax = plt.subplots(figsize=(8, 4))
+
+                            bars = ax.bar(
+                                comparison["Type"],
+                                comparison["CIscore"],
+                            )
+
+                            ax.set_ylabel("CIscore")
+                            ax.set_title(
+                                "Actual vs Predicted CIscore"
+                            )
+
+                            ax.bar_label(
+                                bars,
+                                fmt="%.2f",
+                                padding=3,
+                            )
+
+                            maximum = float(comparison["CIscore"].max())
+                            ax.set_ylim(
+                                0,
+                                maximum * 1.20 if maximum > 0 else 1,
+                            )
+
+                            plt.tight_layout()
+                            st.pyplot(fig)
+
+                            difference = (
+                                predicted_ciscore - actual_ciscore
+                            )
+
+                            c1, c2, c3 = st.columns(3)
+
+                            with c1:
+                                st.metric(
+                                    "Actual CIscore",
+                                    f"{actual_ciscore:.2f}",
+                                )
+
+                            with c2:
+                                st.metric(
+                                    "Predicted CIscore",
+                                    f"{predicted_ciscore:.2f}",
+                                )
+
+                            with c3:
+                                st.metric(
+                                    "Difference",
+                                    f"{difference:.2f}",
+                                )
+
+                        else:
+
+                            st.warning(
+                                "Actual CIscore is not available in the "
+                                "selected dataset row."
+                            )
+
                     except Exception as error:
 
-                        st.error(
-                            "Prediction could not be generated."
-                        )
-
+                        st.error("Prediction could not be generated.")
                         st.exception(error)
 
-    # --------------------------------------------------------
-    # RESULT
-    # --------------------------------------------------------
+    # ========================================================
+    # MANUAL ENTRY
+    # ========================================================
 
-    if st.session_state.prediction is not None:
-
-        prediction = st.session_state.prediction
+    else:
 
         st.markdown(
-            f"""
-            <div class="result-card">
-                <div class="result-caption">
-                    Predicted Environmental Burden
+            """
+            <div class="hero">
+                <div class="hero-title">
+                    🔬 Environmental Risk Prediction
                 </div>
-                <div class="result-number">
-                    {prediction:.2f}
-                </div>
-                <div class="result-unit">
-                    CIscore
+                <div class="hero-subtitle">
+                    Enter the required indicators to estimate the CIscore.
                 </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-        st.success(
-            f"Prediction generated successfully. Estimated CIscore: {prediction:.2f}"
+        step_names = {
+            1: "🌱 Environmental & Pollution Indicators",
+            2: "👥 Population & Socioeconomic Indicators",
+            3: "🏥 Health Indicators",
+            4: "📊 Other Indicators",
+        }
+
+        current_step = st.session_state.step
+
+        st.markdown(
+            f"""
+            <div class="step-box">
+                <div class="step-label">STEP {current_step} OF 4</div>
+                <div class="step-name">{step_names[current_step]}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
 
-        st.write(
-            "The predicted value is the output of the trained "
-            "Random Forest regression model using the selected "
-            "community indicators."
-        )
+        st.progress(current_step / 4)
 
-        if st.button(
-            "🔄 Start New Prediction",
-            use_container_width=True,
-        ):
-            st.session_state.step = 1
-            st.session_state.input_values = {}
-            st.session_state.prediction = None
-            st.rerun()
+        # ----------------------------------------------------
+        # STEP 1
+        # ----------------------------------------------------
+
+        if current_step == 1:
+
+            st.markdown(
+                '<div class="section-title">'
+                '🌫️ Environmental & Pollution Indicators'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+
+            st.markdown(
+                '<div class="section-subtitle">'
+                'Enter the environmental and pollution-related indicator values.'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+
+            st.markdown(
+                f"**{len(groups['environmental'])} selected indicators**"
+            )
+
+            render_feature_inputs(
+                groups["environmental"],
+                "environmental",
+            )
+
+            st.divider()
+
+            if st.button(
+                "Continue to Population & Socioeconomic ➡️",
+                type="primary",
+                use_container_width=True,
+            ):
+
+                missing = get_missing_features(
+                    groups["environmental"]
+                )
+
+                if missing:
+
+                    st.error(
+                        "Please fill in all Environmental Indicators "
+                        "before continuing."
+                    )
+
+                    with st.expander("Show missing indicators"):
+                        for feature in missing:
+                            st.write(f"• {feature}")
+
+                else:
+
+                    st.session_state.step = 2
+                    st.rerun()
+
+        # ----------------------------------------------------
+        # STEP 2
+        # ----------------------------------------------------
+
+        elif current_step == 2:
+
+            st.markdown(
+                '<div class="section-title">'
+                '👥 Population & Socioeconomic Indicators'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+
+            st.markdown(
+                '<div class="section-subtitle">'
+                'Enter the population and socioeconomic indicator values.'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+
+            st.markdown(
+                f"**{len(groups['population'])} selected indicators**"
+            )
+
+            render_feature_inputs(
+                groups["population"],
+                "population",
+            )
+
+            st.divider()
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+
+                if st.button(
+                    "⬅️ Back to Environmental",
+                    use_container_width=True,
+                ):
+                    st.session_state.step = 1
+                    st.rerun()
+
+            with col2:
+
+                if st.button(
+                    "Continue to Health ➡️",
+                    type="primary",
+                    use_container_width=True,
+                ):
+
+                    missing = get_missing_features(
+                        groups["population"]
+                    )
+
+                    if missing:
+
+                        st.error(
+                            "Please fill in all Population & Socioeconomic "
+                            "Indicators before continuing."
+                        )
+
+                        with st.expander("Show missing indicators"):
+                            for feature in missing:
+                                st.write(f"• {feature}")
+
+                    else:
+
+                        st.session_state.step = 3
+                        st.rerun()
+
+        # ----------------------------------------------------
+        # STEP 3
+        # ----------------------------------------------------
+
+        elif current_step == 3:
+
+            st.markdown(
+                '<div class="section-title">'
+                '🏥 Health Indicators'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+
+            st.markdown(
+                '<div class="section-subtitle">'
+                'Enter the selected health indicator values.'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+
+            st.markdown(
+                f"**{len(groups['health'])} selected indicators**"
+            )
+
+            render_feature_inputs(
+                groups["health"],
+                "health",
+            )
+
+            st.divider()
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+
+                if st.button(
+                    "⬅️ Back to Population",
+                    use_container_width=True,
+                ):
+                    st.session_state.step = 2
+                    st.rerun()
+
+            with col2:
+
+                if st.button(
+                    "Continue to Other ➡️",
+                    type="primary",
+                    use_container_width=True,
+                ):
+
+                    missing = get_missing_features(
+                        groups["health"]
+                    )
+
+                    if missing:
+
+                        st.error(
+                            "Please fill in all Health Indicators "
+                            "before continuing."
+                        )
+
+                        with st.expander("Show missing indicators"):
+                            for feature in missing:
+                                st.write(f"• {feature}")
+
+                    else:
+
+                        st.session_state.step = 4
+                        st.rerun()
+
+        # ----------------------------------------------------
+        # STEP 4
+        # ----------------------------------------------------
+
+        elif current_step == 4:
+
+            st.markdown(
+                '<div class="section-title">'
+                '📊 Other Indicators'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+
+            st.markdown(
+                '<div class="section-subtitle">'
+                'Enter the remaining selected indicator values.'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+
+            st.markdown(
+                f"**{len(groups['other'])} selected indicators**"
+            )
+
+            render_feature_inputs(
+                groups["other"],
+                "other",
+            )
+
+            st.divider()
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+
+                if st.button(
+                    "⬅️ Back to Health",
+                    use_container_width=True,
+                ):
+                    st.session_state.step = 3
+                    st.rerun()
+
+            with col2:
+
+                if st.button(
+                    "🔎 Predict CIscore",
+                    type="primary",
+                    use_container_width=True,
+                ):
+
+                    # Final validation: every selected feature is required.
+                    missing_features = get_missing_features(
+                        selected_features
+                    )
+
+                    if missing_features:
+
+                        st.error(
+                            f"{len(missing_features)} indicator value(s) "
+                            "are still missing."
+                        )
+
+                        with st.expander("Show missing indicators"):
+                            for feature in missing_features:
+                                st.write(f"• {feature}")
+
+                    else:
+
+                        try:
+
+                            input_data = pd.DataFrame(
+                                [
+                                    {
+                                        feature:
+                                        st.session_state.input_values[feature]
+                                        for feature in selected_features
+                                    }
+                                ],
+                                columns=selected_features,
+                            )
+
+                            predicted_ciscore = float(
+                                model.predict(input_data)[0]
+                            )
+
+                            st.session_state.prediction = predicted_ciscore
+
+                        except Exception as error:
+
+                            st.error(
+                                "Prediction could not be generated."
+                            )
+
+                            st.exception(error)
+
+
+# ============================================================
+# RESULT
+# ============================================================
+
+if (
+    page == "🔬 CIscore Prediction"
+    and st.session_state.prediction is not None
+):
+
+    prediction = st.session_state.prediction
+
+    st.markdown(
+        f"""
+        <div class="result-card">
+            <div class="result-caption">
+                Predicted Environmental Burden
+            </div>
+            <div class="result-number">
+                {prediction:.2f}
+            </div>
+            <div class="result-unit">
+                CIscore
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.success(
+        f"Prediction generated successfully. Estimated CIscore: "
+        f"{prediction:.2f}"
+    )
+
+    st.write(
+        "The predicted value is the output of the trained "
+        "Random Forest regression model using the selected "
+        "community indicators."
+    )
+
+    if st.button(
+        "🔄 Start New Prediction",
+        use_container_width=True,
+    ):
+
+        st.session_state.step = 1
+        st.session_state.input_values = {}
+        st.session_state.prediction = None
+        st.session_state.dataset_row_loaded = False
+        st.session_state.actual_ciscore = None
+        st.rerun()
 
 
 # ============================================================
@@ -852,9 +1154,9 @@ elif page == "ℹ️ About the Model":
         <div class="card">
             <div class="card-title">⚙️ Feature Scaling</div>
             <div class="card-text">
-                The saved scaler is applied to prediction inputs using
-                the same preprocessing object used by the current
-                deployment setup.
+                The current application passes the selected indicator
+                values directly to the trained Random Forest model.
+                No scaler is applied in this deployment.
             </div>
         </div>
         """,
@@ -911,4 +1213,3 @@ elif page == "ℹ️ About the Model":
         "The application is intended as a model-based analytical "
         "tool to support environmental monitoring and data-driven planning."
     )
-
