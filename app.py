@@ -3,6 +3,7 @@ import pandas as pd
 import joblib
 from pathlib import Path
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 # ============================================================
@@ -53,7 +54,13 @@ with open(css_path, "r", encoding="utf-8") as f:
 model = joblib.load("final_random_forest_model.pkl")
 # scaler = joblib.load("scaler.pkl")
 selected_features = list(joblib.load("model_features.pkl"))
+test_data_path = Path(__file__).with_name(
+    "test_data.pkl"
+)
 
+test_df = joblib.load(
+    test_data_path
+)
 
 # ============================================================
 # SESSION STATE
@@ -447,6 +454,7 @@ elif page == "🔬 CIscore Prediction":
         [
             "✏️ Manual Entry",
             "📂 Select from Dataset",
+             "🧪 Test 50 Samples",
         ],
         horizontal=True,
     )
@@ -712,7 +720,7 @@ elif page == "🔬 CIscore Prediction":
     # MANUAL ENTRY
     # ========================================================
 
-    else:
+    elif input_method == "✏️ Manual Entry":
 
         st.markdown(
             """
@@ -1041,6 +1049,145 @@ elif page == "🔬 CIscore Prediction":
 
                             st.exception(error)
 
+    elif input_method == "🧪 Test 50 Samples":
+
+        st.subheader("🧪 Test Model Using Unseen Test Data")
+
+        st.write(
+        "The following test samples are taken from the "
+        "20% testing dataset that was not used during model training."
+        )
+
+        st.info(
+        f"Available testing samples: {len(test_df)}"
+        )
+
+        if st.button(
+            "🎲 Select Random 50 Test Samples",
+            type="primary",
+            use_container_width=True
+        ):
+
+            test_50 = test_df.sample(
+                n=50,
+                random_state=42
+            )
+
+            X_test_50 = test_50[selected_features]
+
+            y_actual = test_50["CIscore"]
+
+            y_predicted = model.predict(
+            X_test_50
+            )
+
+            results = pd.DataFrame({
+                "Actual CIscore": y_actual.values,
+                "Predicted CIscore": y_predicted
+            })
+
+            results["Difference"] = (
+                results["Predicted CIscore"]
+                - results["Actual CIscore"]
+            )
+
+            st.session_state.test_results = results 
+    if "test_results" in st.session_state:
+
+        results = st.session_state.test_results
+
+        from sklearn.metrics import (
+            mean_absolute_error,
+            mean_squared_error,
+            r2_score
+        )
+
+        actual = results["Actual CIscore"]
+
+        predicted = results["Predicted CIscore"]
+
+        mae = mean_absolute_error(
+            actual,
+            predicted
+        )
+
+        rmse = np.sqrt(
+            mean_squared_error(
+                actual,
+                predicted
+            )
+        )
+
+        r2 = r2_score(
+            actual,
+            predicted
+        )
+
+        st.subheader("📈 Testing Performance")
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.metric(
+                "MAE",
+                f"{mae:.4f}"
+            )
+
+        with col2:
+            st.metric(
+                "RMSE",
+                f"{rmse:.4f}"
+            )
+
+        with col3:
+            st.metric(
+                "R²",
+                f"{r2:.4f}"
+            )
+
+        st.subheader(
+            "📋 Actual vs Predicted CIscore"
+        )
+
+        st.dataframe(
+            results,
+            use_container_width=True
+        )
+        
+        st.subheader(
+            "📊 Actual vs Predicted CIscore"
+        )
+
+        fig, ax = plt.subplots(
+            figsize=(10, 5)
+        )
+
+        ax.plot(
+            range(1, len(actual) + 1),
+            actual.values,
+            marker="o",
+            label="Actual CIscore"
+        )
+
+        ax.plot(
+            range(1, len(predicted) + 1),
+            predicted.values,
+            marker="x",
+            label="Predicted CIscore"
+        )
+
+        ax.set_xlabel("Testing Sample")
+        ax.set_ylabel("CIscore")
+
+        ax.set_title(
+            "Actual vs Predicted CIscore - 50 Test Samples"
+        )
+
+        ax.legend()
+
+        ax.grid(True)
+
+        st.pyplot(fig)
 
 # ============================================================
 # RESULT
